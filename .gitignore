@@ -1,0 +1,38 @@
+# build output
+/build/
+*.o
+*.d
+
+# binaries (any name the executable gets copied/renamed to)
+/linpaint
+/linpaint_*
+*.exe
+*.dll
+*.so
+
+# nix
+result
+result-*
+
+# python / tooling caches
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# self-test and scratch output
+/selftest-out/
+*.log
+
+# reverse-engineering inputs and dumps (Microsoft material, never commit)
+*.pdb
+*.mui
+/re/out/
+/re/dump/
+
+# editors / OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store

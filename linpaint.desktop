@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Paint
+Comment=Create and edit drawings (Windows 7 Paint for Linux)
+Exec=linpaint %f
+Icon=applications-graphics
+Categories=Graphics;2DGraphics;RasterGraphics;GTK;
+MimeType=image/png;image/jpeg;image/bmp;image/gif;image/tiff;image/x-icon;
