@@ -1432,7 +1432,7 @@ static GdkCursor *make_cursor(const char *icon, int hx, int hy)
 {
     cairo_surface_t *s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, 24, 24);
     cairo_t *cr = cairo_create(s);
-    draw_icon(cr, icon, 24);
+    draw_icon_mode(cr, icon, 24, false);   /* cursors sit on the canvas: always light */
     cairo_destroy(cr);
     GdkCursor *c = gdk_cursor_new_from_surface(gdk_display_get_default(), s, hx, hy);
     cairo_surface_destroy(s);

@@ -4,7 +4,19 @@
 #include <math.h>
 #include <string.h>
 
-static void rgb(cairo_t *cr, int c) { cairo_set_source_rgb(cr, ((c >> 16) & 255) / 255.0, ((c >> 8) & 255) / 255.0, (c & 255) / 255.0); }
+static bool dark_icons;
+
+/* In dark mode, dark strokes would vanish against the ribbon: lift them toward white. */
+static void rgb(cairo_t *cr, int c)
+{
+    double r = ((c >> 16) & 255) / 255.0, g = ((c >> 8) & 255) / 255.0, b = (c & 255) / 255.0;
+    if (dark_icons && 0.299 * r + 0.587 * g + 0.114 * b < 0.45) {
+        r += (1 - r) * 0.55;
+        g += (1 - g) * 0.55;
+        b += (1 - b) * 0.55;
+    }
+    cairo_set_source_rgb(cr, r, g, b);
+}
 
 static void box(cairo_t *cr, double x, double y, double w, double h, int fill, int line)
 {
@@ -131,6 +143,13 @@ static void brushes(cairo_t *cr)
 
 void draw_icon(cairo_t *cr, const char *n, double size)
 {
+    draw_icon_mode(cr, n, size, ui.dark);
+}
+
+void draw_icon_mode(cairo_t *cr, const char *n, double size, bool dark)
+{
+    bool saved = dark_icons;
+    dark_icons = dark;
     cairo_save(cr);
     cairo_scale(cr, size / 16.0, size / 16.0);
     cairo_set_line_width(cr, 1);
@@ -367,22 +386,24 @@ void draw_icon(cairo_t *cr, const char *n, double size)
         box(cr, 2, 2, 12, 12, 0xEEEEEE, 0x999999);
     }
     cairo_restore(cr);
+    dark_icons = saved;
 }
 
+static gboolean icon_draw(GtkWidget *w, cairo_t *cr, gpointer d)
+{
+    int size = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(w), "icon-size"));
+    int W = gtk_widget_get_allocated_width(w), H = gtk_widget_get_allocated_height(w);
+    cairo_translate(cr, (W - size) / 2, (H - size) / 2);
+    draw_icon(cr, d, size);
+    return TRUE;
+}
+
+/* drawn on demand so icons follow light/dark switches */
 GtkWidget *icon_widget(const char *name, int size)
 {
-    int scale = 1;
-    GdkScreen *scr = gdk_screen_get_default();
-    if (scr) {
-        GdkMonitor *m = gdk_display_get_primary_monitor(gdk_screen_get_display(scr));
-        if (m) scale = gdk_monitor_get_scale_factor(m);
-    }
-    cairo_surface_t *s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, size * scale, size * scale);
-    cairo_surface_set_device_scale(s, scale, scale);
-    cairo_t *cr = cairo_create(s);
-    draw_icon(cr, name, size);
-    cairo_destroy(cr);
-    GtkWidget *img = gtk_image_new_from_surface(s);
-    cairo_surface_destroy(s);
-    return img;
+    GtkWidget *da = gtk_drawing_area_new();
+    gtk_widget_set_size_request(da, size, size);
+    g_object_set_data(G_OBJECT(da), "icon-size", GINT_TO_POINTER(size));
+    g_signal_connect(da, "draw", G_CALLBACK(icon_draw), (gpointer)g_intern_string(name));
+    return da;
 }

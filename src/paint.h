@@ -53,6 +53,16 @@ typedef enum {
 
 typedef struct { double r, g, b; } RGB;
 
+/* appearance (theme.c) */
+typedef enum { THEME_AUTO, THEME_LIGHT, THEME_DARK } ThemeMode;
+typedef struct {
+    bool dark;
+    RGB workspace, shadow, ruler_bg, ruler_line, ruler_text;
+    RGB cell_border, cell_empty, cell_empty_border, highlight, fg, accent;
+    double shadow_alpha;
+} UiPalette;
+extern UiPalette ui;
+
 /* Floating selection (CImgWnd selection / CImgBrush) */
 typedef struct {
     bool active;          /* a selection exists */
@@ -97,6 +107,7 @@ typedef struct {
     /* view */
     double zoom;
     bool show_rulers, show_grid, show_status;
+    int theme_mode;                    /* ThemeMode */
 
     Selection sel;
 
@@ -117,6 +128,7 @@ typedef struct {
     GtkWidget *bold_btn, *italic_btn, *underline_btn, *strike_btn, *opaque_btn, *transp_btn;
     GtkWidget *thumb_win, *thumb_area;
     GtkWidget *chk_rulers, *chk_grid, *chk_status, *transp_check;
+    GtkWidget *theme_radio[3];
     bool updating_ui;
     int mouse_x, mouse_y;              /* image coords, or -1 */
 } App;
@@ -263,8 +275,14 @@ void error_dialog(const char *fmt, ...);
 
 void selftest_schedule(void);
 
+/* ---- appearance (theme.c) ---- */
+void theme_init(void);
+void theme_apply(void);
+void theme_set_mode(int mode);
+
 /* ---- icons (icons.c) ---- */
 GtkWidget *icon_widget(const char *name, int size);
 void draw_icon(cairo_t *cr, const char *name, double size);
+void draw_icon_mode(cairo_t *cr, const char *name, double size, bool dark);
 
 #endif

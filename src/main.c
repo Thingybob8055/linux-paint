@@ -221,7 +221,7 @@ static gboolean colorbox_draw(GtkWidget *w, cairo_t *cr, gpointer d)
     int W = gtk_widget_get_allocated_width(w), H = gtk_widget_get_allocated_height(w);
     RGB c = which == 2 ? app.color2 : app.color1;
     if (app.active_color == which) {
-        cairo_set_source_rgb(cr, 0.98, 0.85, 0.5);
+        cairo_set_source_rgb(cr, ui.highlight.r, ui.highlight.g, ui.highlight.b);
         cairo_rectangle(cr, 0, 0, W, H);
         cairo_fill(cr);
     }
@@ -229,7 +229,7 @@ static gboolean colorbox_draw(GtkWidget *w, cairo_t *cr, gpointer d)
     cairo_rectangle(cr, (W - s) / 2 + 0.5, 3.5, s, s);
     cairo_set_source_rgb(cr, c.r, c.g, c.b);
     cairo_fill_preserve(cr);
-    cairo_set_source_rgb(cr, 0.4, 0.45, 0.5);
+    cairo_set_source_rgb(cr, ui.cell_border.r, ui.cell_border.g, ui.cell_border.b);
     cairo_set_line_width(cr, 1);
     cairo_stroke(cr);
     return TRUE;
@@ -278,11 +278,11 @@ static gboolean palette_draw(GtkWidget *w, cairo_t *cr, gpointer d)
     if (palette_get(i, &c)) {
         cairo_set_source_rgb(cr, c.r, c.g, c.b);
         cairo_fill_preserve(cr);
-        cairo_set_source_rgb(cr, 0.55, 0.6, 0.65);
+        cairo_set_source_rgb(cr, ui.cell_border.r, ui.cell_border.g, ui.cell_border.b);
     } else {
-        cairo_set_source_rgb(cr, 0.98, 0.98, 0.98);
+        cairo_set_source_rgb(cr, ui.cell_empty.r, ui.cell_empty.g, ui.cell_empty.b);
         cairo_fill_preserve(cr);
-        cairo_set_source_rgb(cr, 0.8, 0.82, 0.85);
+        cairo_set_source_rgb(cr, ui.cell_empty_border.r, ui.cell_empty_border.g, ui.cell_empty_border.b);
     }
     cairo_set_line_width(cr, 1);
     cairo_stroke(cr);
@@ -678,7 +678,7 @@ static gboolean thumb_draw(GtkWidget *w, cairo_t *cr, gpointer d)
 {
     (void)d;
     int W = gtk_widget_get_allocated_width(w), H = gtk_widget_get_allocated_height(w);
-    cairo_set_source_rgb(cr, 0.788, 0.827, 0.886);
+    cairo_set_source_rgb(cr, ui.workspace.r, ui.workspace.g, ui.workspace.b);
     cairo_paint(cr);
     double s = MIN((double)W / app.w, (double)H / app.h);
     double ox = (W - app.w * s) / 2, oy = (H - app.h * s) / 2;
@@ -853,7 +853,7 @@ static gboolean shape_icon_draw(GtkWidget *w, cairo_t *cr, gpointer d)
     int W = gtk_widget_get_allocated_width(w), H = gtk_widget_get_allocated_height(w);
     double m = 3;
     cairo_set_line_width(cr, 1.2);
-    cairo_set_source_rgb(cr, 0.12, 0.3, 0.6);
+    cairo_set_source_rgb(cr, ui.accent.r, ui.accent.g, ui.accent.b);
     if (k == SHAPE_LINE) {
         cairo_move_to(cr, m, H - m); cairo_line_to(cr, W - m, m);
     } else if (k == SHAPE_CURVE) {
@@ -903,7 +903,7 @@ static gboolean size_line_draw(GtkWidget *w, cairo_t *cr, gpointer d)
 {
     int px = GPOINTER_TO_INT(d);
     int W = gtk_widget_get_allocated_width(w), H = gtk_widget_get_allocated_height(w);
-    cairo_set_source_rgb(cr, 0.1, 0.1, 0.1);
+    cairo_set_source_rgb(cr, ui.fg.r, ui.fg.g, ui.fg.b);
     double t = MIN(px, H - 2);
     cairo_rectangle(cr, 4, (H - t) / 2, W - 8, t);
     cairo_fill(cr);
@@ -1105,6 +1105,12 @@ static void zoom_cmd(gpointer d)
     else canvas_zoom_step(v);
 }
 
+static void theme_toggled(GtkToggleButton *b, gpointer d)
+{
+    if (app.updating_ui || !gtk_toggle_button_get_active(b)) return;
+    theme_set_mode(GPOINTER_TO_INT(d));
+}
+
 static void build_view(GtkWidget *bar)
 {
     GtkWidget *zh = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
@@ -1150,6 +1156,22 @@ static void build_view(GtkWidget *bar)
     g_object_set_data(G_OBJECT(app.window), "thumb-toggle", tb);
     gtk_box_pack_start(GTK_BOX(dh), tb, FALSE, FALSE, 0);
     add_group(bar, group("Display", dh));
+
+    /* Theme (Linux addition): follow the desktop, or force light / dark */
+    GtkWidget *tv2 = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_set_valign(tv2, GTK_ALIGN_CENTER);
+    static const char *names[3] = { "_Auto (system)", "_Light", "_Dark" };
+    static const char *tips[3] = { "Follow the desktop's light or dark setting", "Always use the light appearance",
+                                   "Always use the dark appearance" };
+    for (int i = 0; i < 3; i++) {
+        app.theme_radio[i] = i == 0 ? gtk_radio_button_new_with_mnemonic(NULL, names[i])
+                                    : gtk_radio_button_new_with_mnemonic_from_widget(
+                                          GTK_RADIO_BUTTON(app.theme_radio[0]), names[i]);
+        gtk_widget_set_tooltip_text(app.theme_radio[i], tips[i]);
+        g_signal_connect(app.theme_radio[i], "toggled", G_CALLBACK(theme_toggled), GINT_TO_POINTER(i));
+        gtk_box_pack_start(GTK_BOX(tv2), app.theme_radio[i], FALSE, FALSE, 0);
+    }
+    add_group(bar, group("Theme", tv2));
 }
 
 /* ------------------------------------------------------------------ */
@@ -1419,6 +1441,8 @@ void update_ui(void)
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(app.chk_rulers), app.show_rulers);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(app.chk_grid), app.show_grid);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(app.chk_status), app.show_status);
+    if (app.theme_radio[app.theme_mode])
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(app.theme_radio[app.theme_mode]), TRUE);
     GtkWidget *tb = g_object_get_data(G_OBJECT(app.window), "thumb-toggle");
     if (tb) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(tb), app.thumb_win != NULL);
     gtk_widget_set_visible(app.hruler, app.show_rulers);
@@ -1595,6 +1619,11 @@ static void load_settings(void)
     if (g_key_file_has_key(kf, "View", "ShowRulers", NULL)) app.show_rulers = g_key_file_get_boolean(kf, "View", "ShowRulers", NULL);
     if (g_key_file_has_key(kf, "View", "ShowStatusBar", NULL)) app.show_status = g_key_file_get_boolean(kf, "View", "ShowStatusBar", NULL);
     if (g_key_file_has_key(kf, "View", "ShowGrid", NULL)) app.show_grid = g_key_file_get_boolean(kf, "View", "ShowGrid", NULL);
+    gchar *th = g_key_file_get_string(kf, "View", "Theme", NULL);
+    if (th) {
+        app.theme_mode = !strcmp(th, "light") ? THEME_LIGHT : !strcmp(th, "dark") ? THEME_DARK : THEME_AUTO;
+        g_free(th);
+    }
     int bw = g_key_file_get_integer(kf, "View", "BMPWidth", NULL), bh = g_key_file_get_integer(kf, "View", "BMPHeight", NULL);
     /* CPBApp::InitInstance ignores stored sizes above 5000 */
     if (bw > 0 && bh > 0 && bw <= 5000 && bh <= 5000) { default_w = bw; default_h = bh; }
@@ -1622,6 +1651,8 @@ static void save_settings(void)
     g_key_file_set_boolean(kf, "View", "ShowRulers", app.show_rulers);
     g_key_file_set_boolean(kf, "View", "ShowStatusBar", app.show_status);
     g_key_file_set_boolean(kf, "View", "ShowGrid", app.show_grid);
+    g_key_file_set_string(kf, "View", "Theme",
+                          app.theme_mode == THEME_LIGHT ? "light" : app.theme_mode == THEME_DARK ? "dark" : "auto");
     g_key_file_set_integer(kf, "View", "BMPWidth", app.w);
     g_key_file_set_integer(kf, "View", "BMPHeight", app.h);
     g_key_file_set_string(kf, "Text", "TypeFaceName", app.font_family);
@@ -1646,16 +1677,6 @@ static void save_settings(void)
 
 /* ------------------------------------------------------------------ */
 
-static const char *css =
-    "notebook.ribbon > header { background: #DFE9F5; }"
-    "notebook.ribbon > stack { background: linear-gradient(#FFFFFF, #E8EFF8); }"
-    "notebook.ribbon > header tab { padding: 2px 14px; }"
-    ".group-label { color: #3B4F6B; font-size: 0.85em; }"
-    "button.file-button { background: #1E5BB8; color: white; border-radius: 3px 3px 0 0; padding: 2px 12px; }"
-    "button.file-button label { color: white; }"
-    ".shape-btn { padding: 1px; min-height: 0; min-width: 0; }"
-    "button.checked-big:checked, button:checked { background: #FCE4A8; }"
-    ".paint-status { background: #DCE6F4; border-top: 1px solid #A8B8D0; }";
 
 static void on_drop(GtkWidget *w, GdkDragContext *ctx, int x, int y, GtkSelectionData *sd, guint info, guint t, gpointer d)
 {
@@ -1673,10 +1694,7 @@ static void on_drop(GtkWidget *w, GdkDragContext *ctx, int x, int y, GtkSelectio
 static void activate(GtkApplication *ga, gpointer d)
 {
     char **argv = d;
-    GtkCssProvider *cp = gtk_css_provider_new();
-    gtk_css_provider_load_from_data(cp, css, -1, NULL);
-    gtk_style_context_add_provider_for_screen(gdk_screen_get_default(), GTK_STYLE_PROVIDER(cp),
-                                              GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    theme_init();
 
     app.window = gtk_application_window_new(ga);
     gtk_window_set_icon_name(GTK_WINDOW(app.window), "applications-graphics");

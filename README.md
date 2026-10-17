@@ -77,6 +77,7 @@ opening a window.
 - **Colours:** Size gallery; Colour 1 and 2 (right mouse button draws with colour 2 throughout); Edit colours, which fills the 10-slot custom row and is remembered.
 - **Text:** font, size, Bold/Italic/Underline/Strikethrough, opaque or transparent background. Selection, caret navigation, and clipboard work inside the box.
 - **View:** Zoom in/out/100%, zoom slider, Ctrl+wheel; Rulers; Gridlines; Status bar (cursor position, selection size, image size, file size); Full screen; Thumbnail window.
+- **Theme (Linux addition):** View → Theme → Auto / Light / Dark. Auto follows the desktop: GNOME's `color-scheme`, or a dark GTK theme such as Adwaita-dark or Breeze-Dark, detected from the theme's text colour. Light and Dark force Adwaita / Adwaita-dark. The choice is saved as `Theme=` in `settings.ini`.
 - **File:** New, Open, Save, Save as (PNG, JPEG, 24-bit/256/16-colour/monochrome BMP, GIF, TIFF), Print, Page setup, Print preview, Set as desktop background (Fill/Tile/Centre, through GNOME `gsettings`), Properties (units in/cm/px, black-and-white conversion, Default), Recent pictures, drag-and-drop open, save-changes prompt.
 - **Canvas:** resize by dragging the edge handles; 50-level undo/redo.
 - **Shortcuts:** Ctrl+N/O/S/P/Z/Y/X/C/V/A/E/W/R/G, Ctrl+Shift+X, F11, F12, Ctrl+PgUp/PgDn, Ctrl +/−, Delete, Esc.

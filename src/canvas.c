@@ -86,10 +86,10 @@ static gboolean on_draw(GtkWidget *w, cairo_t *cr, gpointer d)
     double iw = app.w * app.zoom, ih = app.h * app.zoom;
 
     /* workspace */
-    cairo_set_source_rgb(cr, 0.788, 0.827, 0.886);
+    cairo_set_source_rgb(cr, ui.workspace.r, ui.workspace.g, ui.workspace.b);
     cairo_paint(cr);
     /* soft shadow */
-    cairo_set_source_rgba(cr, 0.45, 0.52, 0.62, 0.35);
+    cairo_set_source_rgba(cr, ui.shadow.r, ui.shadow.g, ui.shadow.b, ui.shadow_alpha);
     cairo_rectangle(cr, MARGIN + 2, MARGIN + 2, iw + 1, ih + 1);
     cairo_fill(cr);
 
@@ -144,7 +144,7 @@ static gboolean on_draw(GtkWidget *w, cairo_t *cr, gpointer d)
         double dash[] = { 2, 2 };
         cairo_set_dash(cr, dash, 2, 0);
         cairo_set_line_width(cr, 1);
-        cairo_set_source_rgb(cr, 0, 0, 0);
+        cairo_set_source_rgb(cr, ui.fg.r, ui.fg.g, ui.fg.b);
         cairo_rectangle(cr, MARGIN - 0.5, MARGIN - 0.5, cv.new_w * app.zoom + 1, cv.new_h * app.zoom + 1);
         cairo_stroke(cr);
     }
@@ -331,9 +331,9 @@ static gboolean ruler_draw(GtkWidget *w, cairo_t *cr, gpointer data)
 {
     bool horiz = GPOINTER_TO_INT(data);
     int W = gtk_widget_get_allocated_width(w), H = gtk_widget_get_allocated_height(w);
-    cairo_set_source_rgb(cr, 0.96, 0.97, 0.99);
+    cairo_set_source_rgb(cr, ui.ruler_bg.r, ui.ruler_bg.g, ui.ruler_bg.b);
     cairo_paint(cr);
-    cairo_set_source_rgb(cr, 0.6, 0.66, 0.75);
+    cairo_set_source_rgb(cr, ui.ruler_line.r, ui.ruler_line.g, ui.ruler_line.b);
     cairo_set_line_width(cr, 1);
     if (horiz) { cairo_move_to(cr, 0, H - 0.5); cairo_line_to(cr, W, H - 0.5); }
     else { cairo_move_to(cr, W - 0.5, 0); cairo_line_to(cr, W - 0.5, H); }
@@ -349,7 +349,7 @@ static gboolean ruler_draw(GtkWidget *w, cairo_t *cr, gpointer data)
     while (major * app.zoom < 60) major *= 2;
     double minor = major / 10;
     if (minor * app.zoom < 4) minor = major / 2;
-    cairo_set_source_rgb(cr, 0.25, 0.25, 0.3);
+    cairo_set_source_rgb(cr, ui.ruler_text.r, ui.ruler_text.g, ui.ruler_text.b);
     cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL);
     cairo_set_font_size(cr, 9);
     double start = floor(((0 + off - MARGIN) / app.zoom) / minor) * minor;
@@ -384,6 +384,14 @@ static gboolean ruler_draw(GtkWidget *w, cairo_t *cr, gpointer data)
         else { cairo_move_to(cr, 0, floor(p) + 0.5); cairo_line_to(cr, W, floor(p) + 0.5); }
         cairo_stroke(cr);
     }
+    return TRUE;
+}
+
+static gboolean corner_draw(GtkWidget *w, cairo_t *cr, gpointer d)
+{
+    (void)w; (void)d;
+    cairo_set_source_rgb(cr, ui.ruler_bg.r, ui.ruler_bg.g, ui.ruler_bg.b);
+    cairo_paint(cr);
     return TRUE;
 }
 
@@ -428,6 +436,7 @@ GtkWidget *canvas_create(void)
     app.hruler = gtk_drawing_area_new();
     app.vruler = gtk_drawing_area_new();
     app.ruler_corner = gtk_drawing_area_new();
+    g_signal_connect(app.ruler_corner, "draw", G_CALLBACK(corner_draw), NULL);
     gtk_widget_set_size_request(app.hruler, -1, RULER);
     gtk_widget_set_size_request(app.vruler, RULER, -1);
     gtk_widget_set_size_request(app.ruler_corner, RULER, RULER);
