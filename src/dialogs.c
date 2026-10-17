@@ -358,7 +358,7 @@ void cmd_edit_colors(void)
 
 void cmd_about(void)
 {
-    const char *authors[] = { "Reconstructed from Windows 7 Paint (mspaint.exe 6.1.7600)", NULL };
+    const char *authors[] = { "Thingybb8055", NULL };
     gtk_show_about_dialog(GTK_WINDOW(app.window),
                           "program-name", APP_NAME,
                           "version", "6.1-linux",
