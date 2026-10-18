@@ -1,0 +1,36 @@
+app-id: org.linpaint.Paint
+runtime: org.gnome.Platform
+runtime-version: '51'
+sdk: org.gnome.Sdk
+command: linpaint
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  # Open/Save use GtkFileChooserDialog (not the portal-backed native chooser),
+  # and Recent pictures / drag-and-drop pass plain paths, so the sandbox needs
+  # to see the user's files directly.
+  - --filesystem=home
+  - --filesystem=xdg-run/gvfsd
+  - --talk-name=org.gtk.vfs.*
+modules:
+  - name: linpaint
+    buildsystem: simple
+    build-commands:
+      - make
+      - install -Dm755 linpaint /app/bin/linpaint
+      - install -Dm644 linpaint.desktop /app/share/applications/org.linpaint.Paint.desktop
+      - desktop-file-edit --set-icon=org.linpaint.Paint /app/share/applications/org.linpaint.Paint.desktop
+      - install -Dm644 flatpak/org.linpaint.Paint.svg /app/share/icons/hicolor/scalable/apps/org.linpaint.Paint.svg
+      - install -Dm644 flatpak/org.linpaint.Paint.metainfo.xml /app/share/metainfo/org.linpaint.Paint.metainfo.xml
+    sources:
+      - type: dir
+        path: ..
+        skip:
+          - build
+          - linpaint
+          - result
+          - .flatpak-builder
+          - flatpak/build-dir
+          - flatpak/repo

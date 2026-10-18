@@ -6,12 +6,49 @@ built by reverse-engineering the binary in `../mspaint.exe`.
 ```
 src/        C sources (≈6.5k lines)
 re/         scripts used for the reverse engineering (no Microsoft code or assets)
+flatpak/    Flatpak manifest, AppStream metainfo and app icon
 default.nix Nix package (wrapGAppsHook3)    shell.nix  dev shell
 ```
 
 ## Build and run
 
-On NixOS:
+The only build dependencies are a C compiler, `make`, `pkg-config` and the GTK 3 development
+files. Install them with your distro's command below, then build:
+
+```sh
+make
+./linpaint [file]
+```
+
+| Distro | Build dependencies |
+|---|---|
+| Debian, Ubuntu, Mint, Pop!_OS | `sudo apt install build-essential pkg-config libgtk-3-dev` |
+| Fedora, RHEL, CentOS Stream | `sudo dnf install gcc make pkgconf-pkg-config gtk3-devel` |
+| Arch, Manjaro, EndeavourOS | `sudo pacman -S --needed base-devel gtk3` |
+| openSUSE Tumbleweed / Leap | `sudo zypper install gcc make pkg-config gtk3-devel` |
+| Void | `sudo xbps-install -S base-devel pkg-config gtk+3-devel` |
+| Alpine | `sudo apk add build-base pkgconf gtk+3.0-dev` |
+| Gentoo | `sudo emerge --ask x11-libs/gtk+:3` (the toolchain is already present) |
+| NixOS | see below |
+
+These runtime packages are optional:
+
+- `xdg-utils`: *Send in e-mail*.
+- SANE (`sane-utils` on Debian/Ubuntu, `sane-backends` on Fedora/openSUSE, `sane` on Arch):
+  *From scanner or camera*.
+- `librsvg` (usually already installed with GTK): opening SVG files.
+
+### Installing
+
+```sh
+make install                                # binary + .desktop file into ~/.local
+sudo make install PREFIX=/usr/local         # or system-wide
+```
+
+To add your own compiler flags, set them in the environment, as in `CFLAGS="-O3" make`. Passing
+`make CFLAGS=...` on the command line replaces the GTK include flags and the build fails.
+
+### NixOS
 
 ```sh
 nix-build              # -> ./result/bin/linpaint (wrapped, recommended)
@@ -19,11 +56,72 @@ nix-build              # -> ./result/bin/linpaint (wrapped, recommended)
 nix-shell --run make   # -> ./linpaint
 ```
 
-Elsewhere: install the GTK3 dev package and `pkg-config`, then run `make && ./linpaint [file]`.
-`make install` copies the binary and a `.desktop` file to `~/.local`.
+### Command line
 
 `linpaint --convert IN OUT [png|jpeg|bmp24|bmp8|bmp4|bmp1|gif|tiff]` re-saves an image without
 opening a window.
+
+## Flatpak
+
+`flatpak/org.linpaint.Paint.yml` builds against the GNOME 51 runtime. You need `flatpak` and
+`flatpak-builder` (from your distro, or `flatpak install flathub org.flatpak.Builder`, which then
+runs as `flatpak run org.flatpak.Builder` in place of `flatpak-builder`).
+
+Build and install it for the current user:
+
+```sh
+flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+flatpak-builder --user --install --install-deps-from=flathub --force-clean \
+    flatpak/build-dir flatpak/org.linpaint.Paint.yml
+flatpak run org.linpaint.Paint
+```
+
+### Distributing
+
+**A single-file bundle.** This is the easiest option. Export to a local repo, then pack a
+`.flatpak` file you can attach to a GitHub release:
+
+```sh
+flatpak-builder --repo=flatpak/repo --force-clean flatpak/build-dir flatpak/org.linpaint.Paint.yml
+flatpak build-bundle flatpak/repo linpaint.flatpak org.linpaint.Paint \
+    --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo
+```
+
+Users install it with `flatpak install --user linpaint.flatpak`. `--runtime-repo` lets Flatpak
+fetch the GNOME runtime from Flathub automatically. Bundles don't auto-update. Each release means
+building and sharing a new file.
+
+**Your own repository.** Users get updates through `flatpak update`. Build with
+`--gpg-sign=KEYID --repo=flatpak/repo`, then host the `flatpak/repo` directory on any static host
+(GitHub Pages, S3, a web server). Publish a `.flatpakrepo` file that points at it with the public
+GPG key. Users add it once with `flatpak remote-add`.
+
+**Flathub.** This reaches the most users and gives you updates and the store listing. Before
+submitting:
+
+1. Change the app ID to one you can prove you own. For this repo that is
+   `io.github.Thingybob8055.linux_paint` (Flathub turns `-` into `_`). Rename it in the manifest,
+   the metainfo, the three file names under `flatpak/`, and `gtk_application_new()` in
+   `src/main.c`.
+2. Point the manifest's source at a tagged release instead of the local directory:
+   `type: git`, `url: https://github.com/Thingybob8055/linux-paint.git`, `tag: v6.1`, `commit: <sha>`.
+3. Add screenshots, and a `<project_license>` once the project has a license, to the metainfo.
+   Check the result with `flatpak run --command=flatpak-builder-lint org.flatpak.Builder manifest
+   <manifest>`.
+4. Fork `flathub/flathub`, add the manifest on a branch based on `new-pr`, and open a pull request
+   (see <https://docs.flathub.org/docs/for-app-authors/submission>).
+
+### Sandbox limitations
+
+- *Set as desktop background* calls `gsettings`. That only changes the sandbox's private settings,
+  so it reports success but the wallpaper stays the same. The fix is the wallpaper portal
+  (`org.freedesktop.portal.Wallpaper`).
+- *From scanner or camera* is unavailable, because `scanimage` isn't in the runtime.
+- Theme → *Auto* can't read GNOME's `color-scheme` from inside the sandbox. It still follows a dark
+  GTK theme name, and *Light* and *Dark* work. The fix is to read `org.freedesktop.appearance
+  color-scheme` from the Settings portal.
+- Open/Save use the GTK file dialog rather than the portal file chooser, so the manifest grants
+  `--filesystem=home`. Switching to `GtkFileChooserNative` would allow a tighter sandbox.
 
 ## How the original was analysed
 

@@ -36,3 +36,9 @@ venv/
 *.swp
 *~
 .DS_Store
+
+# flatpak
+.flatpak-builder/
+/flatpak/build-dir/
+/flatpak/repo/
+*.flatpak
