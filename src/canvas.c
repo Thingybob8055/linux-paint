@@ -165,7 +165,14 @@ static int resize_handle_hit(double wx, double wy)
 static gboolean on_press(GtkWidget *w, GdkEventButton *ev, gpointer d)
 {
     (void)d;
+    /* taking focus back from a ribbon button makes the viewport scroll its
+     * "newly focused" child into view, i.e. jump to the top-left corner */
+    GtkAdjustment *ha = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(app.scroll));
+    GtkAdjustment *va = gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(app.scroll));
+    double hv = gtk_adjustment_get_value(ha), vv = gtk_adjustment_get_value(va);
     gtk_widget_grab_focus(w);
+    gtk_adjustment_set_value(ha, hv);
+    gtk_adjustment_set_value(va, vv);
     if (ev->type != GDK_BUTTON_PRESS && ev->type != GDK_2BUTTON_PRESS) return TRUE;
     if (ev->button != 1 && ev->button != 3) return FALSE;
     if (ev->type == GDK_BUTTON_PRESS && ev->button == 1) {
