@@ -3,8 +3,8 @@
  * Windows 7 Paint has no dark mode; this is a Linux addition.  The mode is
  * Auto (follow the desktop), Light or Dark.  Forced modes switch GTK to
  * Adwaita / Adwaita-dark so every stock widget matches; Auto keeps the
- * user's GTK theme and, on GNOME, honours org.gnome.desktop.interface
- * color-scheme.  Whether the result is dark is decided from the theme's
+ * user's GTK theme and honours the desktop's color-scheme (settings portal,
+ * else org.gnome.desktop.interface).  Whether the result is dark is decided from the theme's
  * actual foreground colour, so themes like Breeze-Dark are detected too.
  */
 #include "paint.h"
@@ -14,8 +14,6 @@ UiPalette ui;
 
 static GtkCssProvider *provider;
 static GSettings *iface;            /* org.gnome.desktop.interface, if installed */
-static gchar *sys_theme;            /* theme name chosen by the desktop */
-static gboolean sys_prefer_dark;
 static bool applying;
 
 static const char *css_common =
@@ -73,23 +71,98 @@ static void set_palette(bool dark)
     }
 }
 
-/* the theme's own text colour tells us whether it is a dark theme */
+/* The theme's own text colour tells us whether it is a dark theme.  Ask a real
+ * (never shown) window: a bare GtkWidgetPath misses the theme's `window`
+ * rules and reports white text for light themes such as adw-gtk3. */
 static bool theme_is_dark(void)
 {
-    GtkWidgetPath *path = gtk_widget_path_new();
-    gtk_widget_path_append_type(path, GTK_TYPE_WINDOW);
-    GtkStyleContext *sc = gtk_style_context_new();
-    gtk_style_context_set_path(sc, path);
-    gtk_style_context_set_screen(sc, gdk_screen_get_default());
+    GtkWidget *w = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    GtkStyleContext *sc = gtk_widget_get_style_context(w);
     GdkRGBA fg;
     gtk_style_context_get_color(sc, GTK_STATE_FLAG_NORMAL, &fg);
-    g_object_unref(sc);
-    gtk_widget_path_unref(path);
+    gtk_widget_destroy(w);
     return 0.299 * fg.red + 0.587 * fg.green + 0.114 * fg.blue > 0.5;
+}
+
+/* org.freedesktop.appearance color-scheme from the settings portal: 1 = prefer dark.
+ * This is the desktop-neutral switch (GNOME, KDE, Noctalia, darkman, ...) and the
+ * only one a Flatpak sandbox can see; GSettings there is a private keyfile. */
+static GDBusProxy *portal;
+static int portal_scheme = -1;      /* -1: no portal answer */
+static gchar *portal_theme;         /* org.gnome.desktop.interface gtk-theme, if the portal has one */
+
+/* takes ownership of v; Read() wraps the value in one more variant than ReadOne() */
+static GVariant *unbox(GVariant *v)
+{
+    while (v && g_variant_is_of_type(v, G_VARIANT_TYPE_VARIANT)) {
+        GVariant *in = g_variant_get_variant(v);
+        g_variant_unref(v);
+        v = in;
+    }
+    return v;
+}
+
+static int scheme_from_variant(GVariant *v)
+{
+    v = unbox(v);
+    int r = v && g_variant_is_of_type(v, G_VARIANT_TYPE_UINT32) ? (int)g_variant_get_uint32(v) : -1;
+    if (v) g_variant_unref(v);
+    return r;
+}
+
+static gchar *string_from_variant(GVariant *v)
+{
+    v = unbox(v);
+    gchar *r = v && g_variant_is_of_type(v, G_VARIANT_TYPE_STRING) && *g_variant_get_string(v, NULL)
+                   ? g_variant_dup_string(v, NULL) : NULL;
+    if (v) g_variant_unref(v);
+    return r;
+}
+
+static GVariant *portal_read(const char *ns, const char *key)
+{
+    GVariant *r = g_dbus_proxy_call_sync(portal, "Read", g_variant_new("(ss)", ns, key),
+                                         G_DBUS_CALL_FLAGS_NONE, 1000, NULL, NULL);
+    if (!r) return NULL;
+    GVariant *v = NULL;
+    g_variant_get(r, "(v)", &v);
+    g_variant_unref(r);
+    return v;
+}
+
+static void portal_signal(GDBusProxy *p, const char *sender, const char *signal, GVariant *params, gpointer d)
+{
+    (void)p; (void)sender; (void)d;
+    if (strcmp(signal, "SettingChanged")) return;
+    const char *ns, *key;
+    GVariant *val;
+    g_variant_get(params, "(&s&sv)", &ns, &key, &val);
+    if (!strcmp(ns, "org.freedesktop.appearance") && !strcmp(key, "color-scheme")) {
+        portal_scheme = scheme_from_variant(val);
+    } else if (!strcmp(ns, "org.gnome.desktop.interface") && !strcmp(key, "gtk-theme")) {
+        g_free(portal_theme);
+        portal_theme = string_from_variant(val);
+    } else {
+        g_variant_unref(val);
+        return;
+    }
+    if (app.theme_mode == THEME_AUTO) theme_apply();
+}
+
+static void portal_init(void)
+{
+    portal = g_dbus_proxy_new_for_bus_sync(G_BUS_TYPE_SESSION, G_DBUS_PROXY_FLAGS_DO_NOT_LOAD_PROPERTIES, NULL,
+                                           "org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop",
+                                           "org.freedesktop.portal.Settings", NULL, NULL);
+    if (!portal) return;
+    portal_scheme = scheme_from_variant(portal_read("org.freedesktop.appearance", "color-scheme"));
+    portal_theme = string_from_variant(portal_read("org.gnome.desktop.interface", "gtk-theme"));
+    g_signal_connect(portal, "g-signal", G_CALLBACK(portal_signal), NULL);
 }
 
 static bool gnome_prefers_dark(void)
 {
+    if (portal_scheme >= 0) return portal_scheme == 1;
     if (!iface) return false;
     gchar *cs = g_settings_get_string(iface, "color-scheme");
     bool d = cs && !strcmp(cs, "prefer-dark");
@@ -120,10 +193,25 @@ void theme_apply(void)
     case THEME_DARK:
         g_object_set(gs, "gtk-theme-name", "Adwaita", "gtk-application-prefer-dark-theme", TRUE, NULL);
         break;
-    default:
-        g_object_set(gs, "gtk-theme-name", sys_theme,
-                     "gtk-application-prefer-dark-theme", sys_prefer_dark || gnome_prefers_dark(), NULL);
+    default: {
+        /* Start from the desktop's own values.  A value we g_object_set()
+         * outranks the desktop's from then on, so only override what the
+         * settings portal tells us: native GTK 3 never re-reads settings.ini,
+         * so the portal is what makes a live light/dark switch reach us. */
+        gtk_settings_reset_property(gs, "gtk-theme-name");
+        gtk_settings_reset_property(gs, "gtk-application-prefer-dark-theme");
+        if (portal_theme)
+            g_object_set(gs, "gtk-theme-name", portal_theme, NULL);
+        if (portal_scheme == 1 || portal_scheme == 2) {
+            g_object_set(gs, "gtk-application-prefer-dark-theme", portal_scheme == 1, NULL);
+        } else {
+            gboolean sys_dark;
+            g_object_get(gs, "gtk-application-prefer-dark-theme", &sys_dark, NULL);
+            if (!sys_dark && gnome_prefers_dark())
+                g_object_set(gs, "gtk-application-prefer-dark-theme", TRUE, NULL);
+        }
         break;
+    }
     }
     applying = false;
     bool dark = app.theme_mode == THEME_DARK ? true : app.theme_mode == THEME_LIGHT ? false : theme_is_dark();
@@ -141,19 +229,11 @@ void theme_set_mode(int mode)
     theme_apply();
 }
 
-/* the desktop changed its theme: remember it, then re-apply our mode */
+/* the desktop changed its theme: re-apply our mode */
 static void system_theme_changed(GObject *o, GParamSpec *ps, gpointer d)
 {
-    (void)d;
-    if (applying) return;
-    /* read only the property that changed: the other may hold our forced value */
-    if (!strcmp(ps->name, "gtk-theme-name")) {
-        g_free(sys_theme);
-        g_object_get(o, "gtk-theme-name", &sys_theme, NULL);
-        if (!sys_theme) sys_theme = g_strdup("Adwaita");
-    } else {
-        g_object_get(o, "gtk-application-prefer-dark-theme", &sys_prefer_dark, NULL);
-    }
+    (void)o; (void)ps; (void)d;
+    if (applying || app.theme_mode != THEME_AUTO) return;
     theme_apply();
 }
 
@@ -166,8 +246,7 @@ static void color_scheme_changed(GSettings *s, const char *key, gpointer d)
 void theme_init(void)
 {
     GtkSettings *gs = gtk_settings_get_default();
-    g_object_get(gs, "gtk-theme-name", &sys_theme, "gtk-application-prefer-dark-theme", &sys_prefer_dark, NULL);
-    if (!sys_theme) sys_theme = g_strdup("Adwaita");
+    portal_init();
 
     GSettingsSchemaSource *src = g_settings_schema_source_get_default();
     GSettingsSchema *sch = src ? g_settings_schema_source_lookup(src, "org.gnome.desktop.interface", TRUE) : NULL;
